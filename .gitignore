@@ -1,0 +1,7 @@
+# Docker
+.env
+*.log
+node_modules/
+n8n_data/
+pgdata/
+miniodata/
