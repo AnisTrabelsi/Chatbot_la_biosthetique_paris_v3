@@ -1,0 +1,202 @@
+{
+  "name": "Onboard Commercial N8n",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "3c8931ce-0086-4ba4-9e38-d1144821717e",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        380
+      ],
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Génération d’un UUID v4 simple et définition des données par défaut\nfunction uuidv4() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {const r = Math.random()*16|0; const v = c==='x'?r:(r&0x3|0x8); return v.toString(16);}); }\nconst item = { json: {} };\nitem.json.id         = uuidv4();        // user_id\nitem.json.full_name  = 'Jean Dupont';   // à remplacer par saisie WA\nitem.json.gps_lat    = 48.8566;         // à remplacer par saisie WA\nitem.json.gps_lon    = 2.3522;          // à remplacer par saisie WA\nitem.json.sector     = 'Paris Centre';  // à remplacer par saisie WA\nreturn [item];"
+      },
+      "id": "4dc4423a-a7d8-4062-a40f-b0bdd5c4ba56",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        380
+      ],
+      "name": "Générer ID + GPS (Code)"
+    },
+    {
+      "parameters": {
+        "schema": "public",
+        "table": "users",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{$json.id}}",
+            "full_name": "={{$json.full_name}}",
+            "sector": "={{$json.sector}}",
+            "gps_lat": "={{$json.gps_lat}}",
+            "gps_lon": "={{$json.gps_lon}}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sector",
+              "displayName": "sector",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gps_lat",
+              "displayName": "gps_lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gps_lon",
+              "displayName": "gps_lon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "portatour_token",
+              "displayName": "portatour_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c8d13078-05aa-4ba2-afef-1fc194f8d49b",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        140,
+        380
+      ],
+      "name": "Créer commercial (PG)",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://waba.360dialog.io/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "2c26c5e9-9104-46e1-b369-8cf0b30b36b9",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        380
+      ],
+      "name": "Message Bienvenue (360dialog)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ic4qCTZz1PBVCiqv",
+          "name": "360dialog"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Générer ID + GPS (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer ID + GPS (Code)": {
+      "main": [
+        [
+          {
+            "node": "Créer commercial (PG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer commercial (PG)": {
+      "main": [
+        [
+          {
+            "node": "Message Bienvenue (360dialog)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4754558a-ede9-4e2c-93f9-5e1314de20fb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "UTFuS6BuPronG3vA",
+  "tags": []
+}

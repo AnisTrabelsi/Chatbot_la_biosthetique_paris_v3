@@ -1,0 +1,458 @@
+{
+  "name": "Analyse-document-client",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client/upload-excel",
+        "options": {}
+      },
+      "id": "7973eb3c-df7b-44ac-ab6f-c257a2903b5f",
+      "name": "Start (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1420,
+        540
+      ],
+      "webhookId": "0873721f-40af-43ca-a449-b9ea08b81ae5"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "portatou-docs",
+        "fileName": "=bilans/{{ $binary.data.fileName }}",
+        "additionalFields": {}
+      },
+      "id": "2438df40-dc23-4bd5-8e3d-d982454c074c",
+      "name": "Store File",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        440
+      ],
+      "credentials": {
+        "s3": {
+          "id": "ZJgfSCspb3S2V7zX",
+          "name": "MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "237d94fd-094f-4a33-96a3-e61570c45aaf",
+      "name": "Spreadsheet File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return $items().map(i => {\n  const r = i.json;\n\n  // 🔑 1. Extraction du numéro client (Kundennummer)\n  const kdnrRaw = String(r.KDNR || r.kdnr || r['KD_Nr'] || '').split('.')[0];\n\n  // 📆 2. Normalisation de la période (au format ISO YYYY-MM-DD)\n  const period = new Date(r.Datum || r.Periode || r.date || Date.now());\n\n  // 📊 3. Extraction et transformation des colonnes de données chiffrées\n  return {\n    json: {\n      kdnr: kdnrRaw,\n      periode: period.toISOString().split('T')[0],\n      ca_ht:      Number(r.CA_HT || r['Umsatz HT'] || 0),\n      ca_retail:  Number(r.Retail || r['Retail HT'] || 0),\n      ca_salon:   Number(r.Salon || r['Salon HT'] || 0),\n      nb_visites: Number(r.Visites || r['Nb visites'] || 0),\n\n      // 🧾 Backup de toute la ligne brute\n      autres: r\n    }\n  };\n});\n"
+      },
+      "id": "30a9f568-95df-4657-9e1d-d3816ec54063",
+      "name": "Clean Rows",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id\nFROM clients\nWHERE kdnr = {{ $json[\"kdnr\"] }}\n",
+        "additionalFields": {}
+      },
+      "id": "e3ef3459-254f-4fb1-b541-39da266b9373",
+      "name": "Lookup Client",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1fb77b01-e358-4932-907e-75bd79386351",
+              "leftValue": "{{ $json[\"id\"] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "409e62b3-b7bc-4588-8119-9431a047459a",
+      "name": "Client Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const id = $json.id || $json[0]?.id;\nreturn [{json: {...$json, client_id: id }}];\n"
+      },
+      "id": "826a2022-a833-4653-a31b-5388d98c0708",
+      "name": "Set Client ID",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO client_stats\n        (client_id,\n         periode,\n         ca_ht,\n         ca_retail,\n         ca_salon,\n         nb_visites,\n         autres,\n         source_file)\nVALUES  ({{ $json.client_id }},\n         '{{ $json.periode }}'::date,\n         {{ $json.ca_ht }},\n         {{ $json.ca_retail }},\n         {{ $json.ca_salon }},\n         {{ $json.nb_visites }},\n         '{{ $json.autres }}'::jsonb,\n         '{{ $binary.data.fileName }}')\nON CONFLICT (client_id, periode)\nDO UPDATE SET\n    ca_ht      = EXCLUDED.ca_ht,\n    ca_retail  = EXCLUDED.ca_retail,\n    ca_salon   = EXCLUDED.ca_salon,\n    nb_visites = EXCLUDED.nb_visites,\n    autres     = EXCLUDED.autres;\n",
+        "additionalFields": {}
+      },
+      "id": "2559352a-9be8-4bda-8166-f41b6af9f1dc",
+      "name": "Upsert Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        60,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        300,
+        480
+      ],
+      "id": "db6530b6-caf6-4b4a-86bb-f6b59f18010a",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "clients",
+          "mode": "list",
+          "cachedResultName": "clients"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kdnr": "={{ $json.kdnr }}",
+            "salon_name": "={{ $json.autres[\"Salon\"] || \"Salon inconnu\" }}",
+            "status": "==prospect",
+            "gps_lat": 0,
+            "gps_lon": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "kdnr",
+              "displayName": "kdnr",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "salon_name",
+              "displayName": "salon_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "addr_street",
+              "displayName": "addr_street",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "addr_city",
+              "displayName": "addr_city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "addr_zip",
+              "displayName": "addr_zip",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gps_lat",
+              "displayName": "gps_lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gps_lon",
+              "displayName": "gps_lon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "owner_id",
+              "displayName": "owner_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -280,
+        720
+      ],
+      "id": "a686f731-c18d-4776-b047-047efcfde5b1",
+      "name": "Create Client (if new)1",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Store File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store File": {
+      "main": [
+        [
+          {
+            "node": "Spreadsheet File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spreadsheet File": {
+      "main": [
+        [
+          {
+            "node": "Clean Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Rows": {
+      "main": [
+        [
+          {
+            "node": "Lookup Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Client": {
+      "main": [
+        [
+          {
+            "node": "Client Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Exists?": {
+      "main": [
+        [
+          {
+            "node": "Set Client ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Client (if new)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Client ID": {
+      "main": [
+        [
+          {
+            "node": "Upsert Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Stats": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Client (if new)1": {
+      "main": [
+        [
+          {
+            "node": "Set Client ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "59bfeb03-e181-45df-bd6e-f1c9756e1b3d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "G9Gq8gTLY9WYxOoo",
+  "tags": []
+}

@@ -1,0 +1,717 @@
+{
+  "name": "generate-visit-report",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "visit-report",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "f2be554c-b22a-4bfc-a7fe-8f7c68d3276f",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        120
+      ],
+      "webhookId": "f83708c8-d42b-45ef-b083-7118ff45d6eb"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id FROM clients WHERE kdnr = '{{$json.kdnr}}' LIMIT 1;",
+        "additionalFields": {}
+      },
+      "id": "e24c7b7a-1177-4061-9377-879d1720dca7",
+      "name": "Lookup Client",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        -440,
+        120
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "table": "clients",
+        "columns": "kdnr,salon_name,status",
+        "additionalFields": {}
+      },
+      "id": "0ba0fcc4-5e4a-4589-854a-eeb9dd8c7494",
+      "name": "Create Client",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "client_id",
+              "value": "={{ $json.rows?.[0]?.id }}"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": true
+        }
+      },
+      "id": "09ab867a-4afa-4b43-954e-658448b6f927",
+      "name": "Set Client ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM client_stats\nWHERE client_id = {{$json.client_id}}\nORDER BY periode DESC\nLIMIT 6;\n",
+        "additionalFields": {}
+      },
+      "id": "689ab5ae-6c3b-4ac6-9be9-c60cfa709a3b",
+      "name": "Get Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        220,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  role,\n  content,\n  created_at\nFROM chat_history\nWHERE client_id = {{ $json.client_id }}\nORDER BY created_at DESC\nLIMIT 20;\n",
+        "additionalFields": {}
+      },
+      "id": "c32ccb48-b908-444e-b556-7e84754d76a1",
+      "name": "Get Chat History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        420,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT content\nFROM knowledge_chunks\nWHERE tag = 'success_story'          -- filtre facultatif : retire-le si tu veux toutes les entrées\nORDER BY random()\nLIMIT 3;\n",
+        "additionalFields": {}
+      },
+      "id": "d0a21404-081e-42de-8090-153925a7a9ba",
+      "name": "Get Stories",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        840,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- 3 documents les plus pertinents pour ce client (similarité vectorielle)\nSELECT\n    doc_title,\n    doc_type,\n    file_url\nFROM\n    catalog_chunks\nORDER BY\n    embedding <-> ( {{ $json.embed_vector }} )::vector\nLIMIT 3;\n",
+        "additionalFields": {}
+      },
+      "id": "1e2d8648-a32e-4a06-9325-7764afc64954",
+      "name": "Recommend Docs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "/**\n * Utilitaire : renvoie un tableau (éventuellement vide) de .json\n * pour le nœud demandé.\n */\nconst jArr = (node) => ($items(node) || []).map(i => i.json);\n\n/**\n * Sélection du client :\n *  – si Lookup Client a trouvé >0 lignes ⇒ on prend la 1ʳᵉ\n *  – sinon on prend la 1ʳᵉ sortie de Create Client\n */\nconst client =\n\t$items('Lookup Client').length\n\t\t? $items('Lookup Client')[0].json\n\t\t: ($items('Create Client')[0]?.json || {});\n\nreturn [\n\t{\n\t\tjson: {\n\t\t\tclient,               // fiche client\n\t\t\tstats   : jArr('Get Stats'),\n\t\t\tchat    : jArr('Get Chat History'),\n\t\t\tstories : jArr('Get Stories'),\n\t\t\tdocs    : jArr('Recommend Docs'),\n\t\t\treports : jArr('Get Reports'),   // comptes-rendus précédents\n\t\t},\n\t},\n];\n"
+      },
+      "id": "ae5b1640-d574-4d7c-a222-07ddca5f39be",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1240,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Récupère le texte produit par le LLM (adapté à la sortie “Basic LLM Chain”)\nconst report = $json.text || $json.completion || '';\n\n// HTML complet + un minimum de style\nconst html = `\n<!doctype html>\n<html lang=\"fr\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Rapport de visite</title>\n  <style>\n    body{font-family:Arial,Helvetica,sans-serif;margin:40px;}\n    h1{margin-bottom:24px;}\n    pre{white-space:pre-wrap;line-height:1.45;}\n  </style>\n</head>\n<body>\n  <h1>Rapport de visite</h1>\n  <pre>${report}</pre>\n</body>\n</html>`;\n\n// Renvoi binaire pour le nœud “HTML → PDF”\nreturn [{\n  binary: {\n    data: Buffer.from(html, 'utf8').toString('base64'),\n    mimeType: 'text/html'\n  },\n  json: {\n    fileName: `rapport-${Date.now()}.html`\n  }\n}];\n"
+      },
+      "id": "7a8325a8-3a96-4d34-948e-d467ab18a65e",
+      "name": "HTML Template",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1640,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "portatou-docs",
+        "fileName": "=reports/{{\"report_${$now}.pdf\"}}",
+        "additionalFields": {}
+      },
+      "id": "5d5dffa9-e394-4dd5-bc28-03d13bb2ad70",
+      "name": "Upload PDF",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        240
+      ],
+      "credentials": {
+        "s3": {
+          "id": "ZJgfSCspb3S2V7zX",
+          "name": "MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $(\"Build Prompt\").first().json.prompt }}\n",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Tu es un assistant commercial. Rédige un rapport de visite complet au format HTML uniquement (pas de markdown)."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1380,
+        520
+      ],
+      "id": "238f139e-602f-430e-922f-064baedb9b9b",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        720
+      ],
+      "id": "137b5fe1-5ddc-46e7-9e20-eff41f08394e",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "RdJcVsE4FKBgoyaR",
+          "name": "OpenAi GPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT file_url, transcript, created_at\nFROM   reports\nWHERE  client_id = {{ $json.client_id }}\nORDER  BY created_at DESC\nLIMIT  5;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        640,
+        240
+      ],
+      "id": "488e056e-aa8f-4ea0-b80a-cdecf1ca40f5",
+      "name": "Get Reports",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://html2pdf:3000/convert",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        260
+      ],
+      "id": "02b601f6-a2e4-48ed-a797-2cdc8296cb15",
+      "name": "HTML → PDF1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        -240
+      ],
+      "id": "1ca3cdd3-1345-4ea2-901b-1faddc7fd704",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node  ▶️  Generate Presigned URL (MinIO / S3)\n\nimport { S3Client, GetObjectCommand } from \"@aws-sdk/client-s3\";\nimport { getSignedUrl } from \"@aws-sdk/s3-request-presigner\";\n\nconst endpoint = \"http://minio:9000\";           // ← URL MinIO\nconst region   = \"us-east-1\";                   // n’importe\nconst accessKeyId     = $env.MINIO_ACCESS_KEY;  // ou chaîne en clair\nconst secretAccessKey = $env.MINIO_SECRET_KEY;  // idem\n\nconst bucket = \"portatou-docs\";\nconst key    = $node[\"Upload PDF\"].json[\"key\"]; // clé générée à l’étape Upload\nconst expiresIn = 60 * 60 * 24;                 // 24 h\n\nconst client = new S3Client({\n  region,\n  endpoint,\n  forcePathStyle: true,      // indispensable avec MinIO\n  credentials: { accessKeyId, secretAccessKey },\n});\n\nconst url = await getSignedUrl(\n  client,\n  new GetObjectCommand({ Bucket: bucket, Key: key }),\n  { expiresIn }\n);\n\nreturn [{ json: { presignedUrl: url } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2260,
+        240
+      ],
+      "id": "c51cbb0f-98fa-4f80-8ce0-a4b5fb009aeb",
+      "name": "Generate Presigned URL"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "reports",
+          "mode": "list",
+          "cachedResultName": "reports"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "client_id": "={{$json.client_id}}",
+            "file_url": "={{$node[\"Generate Presigned URL\"].json.presignedUrl}}",
+            "created_at": "={{$now}}",
+            "report_type": "visit"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "client_id",
+              "displayName": "client_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "report_type",
+              "displayName": "report_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_url",
+              "displayName": "file_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "transcript",
+              "displayName": "transcript",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2520,
+        520
+      ],
+      "id": "8c142e00-0dce-4b4e-aa0e-bc0242a4f25a",
+      "name": "Insert Report Row",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "UTFuS6BuPronG3vA",
+          "mode": "list",
+          "cachedResultName": "Onboard Commercial N8n"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2580,
+        220
+      ],
+      "id": "5635caf4-595a-451d-916a-be2ca05fac38",
+      "name": "Execute Workflow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d16b6f53-1e90-47d9-a09d-bfa496561896",
+              "leftValue": "={{ $json[0]?.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        120
+      ],
+      "id": "dad1fafc-37ac-4fb4-ba8d-064e6930e173",
+      "name": "IF Client Found"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Lookup Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Client": {
+      "main": [
+        [
+          {
+            "node": "IF Client Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Client": {
+      "main": [
+        [
+          {
+            "node": "Set Client ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Client ID": {
+      "main": [
+        [
+          {
+            "node": "Get Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stats": {
+      "main": [
+        [
+          {
+            "node": "Get Chat History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Chat History": {
+      "main": [
+        [
+          {
+            "node": "Get Reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stories": {
+      "main": [
+        [
+          {
+            "node": "Recommend Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recommend Docs": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML Template": {
+      "main": [
+        [
+          {
+            "node": "HTML → PDF1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload PDF": {
+      "main": [
+        [
+          {
+            "node": "Generate Presigned URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "HTML Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Reports": {
+      "main": [
+        [
+          {
+            "node": "Get Stories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML → PDF1": {
+      "main": [
+        [
+          {
+            "node": "Upload PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        []
+      ]
+    },
+    "Generate Presigned URL": {
+      "main": [
+        [
+          {
+            "node": "Insert Report Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Client Found": {
+      "main": [
+        [
+          {
+            "node": "Set Client ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3637863e-bdaa-4ab0-954e-86b94045d7e2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "BPq42XDF8zo5XH8o",
+  "tags": []
+}
