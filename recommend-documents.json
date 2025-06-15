@@ -1,0 +1,206 @@
+{
+  "name": "recommend-documents",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/recommend-docs",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7194a05b-ed44-4491-9335-e60562191863",
+      "name": "Webhook – Recommend Docs",
+      "webhookId": "38c93330-c75a-4fcc-aa4e-209d43114d59"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Ce nœud garantit que nous avons toujours\n *  - prompt : string\n *  - top_n  : nombre d’items à retourner (défaut 5)\n *\n * Input attendu du Webhook :\n *   {\n *     \"prompt\" : \"besoin en balayage blond\",\n *     \"top_n\"  : 3           // facultatif\n *   }\n */\n\nconst p  = $json.prompt  ?? '';        // prompt texte\nconst n  = Number($json.top_n ?? 5);   // si absent ⇒ 5\n\nreturn [\n  {\n    json: { prompt: p, top_n: n }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "eec4cc94-3340-4333-a220-8f23984f39b7",
+      "name": "Set Defaults"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": {{$json.prompt}}\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "17fd295b-340a-4a64-bcd0-56f1ca3faa93",
+      "name": "Embed Prompt – HTTP Request",
+      "alwaysOutputData": false,
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "C7I84DRyBsLjWwkW",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH q AS (\n  SELECT $1::vector AS v\n)\nSELECT id,\n       title,\n       summary,\n       tags,\n       file_path,\n       1 - (embedding <=> q.v) AS score\nFROM   catalog_chunks, q\nORDER  BY score DESC\nLIMIT  $2;\n",
+        "options": {
+          "queryReplacement": "={{'[' + $node[\"Normalize Embedding\"].json.embedding.join(',') + ']' }},{{$node[\"Normalize Embedding\"].json.top_n}}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "3eaa15ef-0d68-45e4-8820-4bc78062ee30",
+      "name": "Similarity Search – Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "592484cb-e8d0-42e0-8622-a862b1d41a49",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw  = $node['Embed Prompt – HTTP Request'].json.embedding_api.data[0].embedding;\nconst norm = Math.sqrt(raw.reduce((s, v) => s + v * v, 0));\n\nreturn [{\n  json: {\n    embedding : raw.map(v => v / norm),\n    top_n     : Number($json.top_n ?? 5),\n    client_id : $json.client_id ?? null\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "9e9485ba-6426-41c8-84e1-67207a14594a",
+      "name": "Normalize Embedding"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    ok: true,\n    docs: $items().map(i => ({\n      id:        i.json.id,\n      title:     i.json.title,\n      summary:   i.json.summary,\n      tags:      i.json.tags,\n      score:     +(+i.json.score).toFixed(4),   \n      file_path: i.json.file_path,\n      url:       i.json.url ?? null             \n    }))\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "647c5373-f333-40dc-b05f-bdc331385da5",
+      "name": "Format Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook – Recommend Docs": {
+      "main": [
+        [
+          {
+            "node": "Set Defaults",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Defaults": {
+      "main": [
+        [
+          {
+            "node": "Embed Prompt – HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Prompt – HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Similarity Search – Postgres": {
+      "main": [
+        [
+          {
+            "node": "Format Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Embedding": {
+      "main": [
+        [
+          {
+            "node": "Similarity Search – Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bb6a479f-a6e3-46c6-b6e1-f632fce7d1fe",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "pU8Raw901ofyqONU",
+  "tags": []
+}
