@@ -3,106 +3,500 @@
   "nodes": [
     {
       "parameters": {
-        "path": "wa/send",
-        "method": "POST"
+        "assignments": {
+          "assignments": [
+            {
+              "id": "80cd974e-1379-4c27-9d22-11a7ac03c1ba",
+              "name": "status",
+              "value": "={{$json.status}}",
+              "type": "string"
+            },
+            {
+              "id": "ba2d3c40-99aa-4056-973f-3e1fcd3a73e9",
+              "name": "waMsgId",
+              "value": "={{$json.messages[0].id}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
       },
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [250, 250]
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        -280
+      ],
+      "id": "90ba1df5-c55d-455f-9095-e091548c0334",
+      "name": "Set – Reply Text"
     },
     {
       "parameters": {
-        "dataType": "string",
-        "rules": [
-          { "value1": "={{ $json[\"type\"] }}", "operation": "equal", "value2": "text" },
-          { "value1": "={{ $json[\"type\"] }}", "operation": "equal", "value2": "media" },
-          { "value1": "={{ $json[\"type\"] }}", "operation": "equal", "value2": "interactive" }
-        ],
-        "fallbackOutput": 3
+        "method": "POST",
+        "url": "https://api.360dialog.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}\n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{$json[\"chatId\"]}}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{$json[\"body\"]}}\"\n  }\n}\n",
+        "options": {}
       },
-      "name": "Switch Type",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -280
+      ],
+      "id": "800c3972-c2d3-438b-8722-1949dccd5561",
+      "name": "Send Text Message",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ic4qCTZz1PBVCiqv",
+          "name": "360dialog"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "040616bf-2e39-45d6-99ed-583970a6bd89",
+              "name": "status",
+              "value": "==\"error\"",
+              "type": "string"
+            },
+            {
+              "id": "c3344575-c21d-49b6-955c-2469d0323065",
+              "name": "error",
+              "value": "={{ $json.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1020,
+        400
+      ],
+      "id": "7ff2109c-d937-4514-a845-2fb534f0dfa4",
+      "name": "Set – Erreur"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b405fc95-d20f-449a-a1d9-beb66d0d3854",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "7090dc7c-2994-41ab-bcee-62b37cf0f1d9",
+              "name": "waMsgId",
+              "value": "={{ $json.messages[0].id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        120
+      ],
+      "id": "baabb6f3-09bd-4b61-a6c4-95bc211e5775",
+      "name": "Set – Reply Interactive"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "de91307a-b253-41a2-bcaa-0ae6a49b6b1e",
+              "name": "status",
+              "value": "={{$json.status}}",
+              "type": "string"
+            },
+            {
+              "id": "097224aa-f54b-4290-ac24-bab6e0df2515",
+              "name": "waMsgId",
+              "value": "={{$json.messages[0].id}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        -100
+      ],
+      "id": "aa5a43e8-97b7-4e87-a20d-452b265c68ae",
+      "name": "Set – Reply Media"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1140,
+        -100
+      ],
+      "id": "7243b578-76b1-428b-8d54-b29ed6a78582",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://api.360dialog.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{$json[\"chatId\"]}}\",\n  \"type\": \"interactive\",\n  \"interactive\": {\n    \"type\": \"button\",\n    \"body\": {\n      \"text\": \"{{$json[\"body\"]}}\"\n    },\n    \"action\": {\n      \"buttons\": {{$json[\"buttons\"]}}\n    }\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        60
+      ],
+      "id": "cf7087c3-7e93-4ea1-a57c-7a81d53f4704",
+      "name": "Send Interactive Message",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ic4qCTZz1PBVCiqv",
+          "name": "360dialog"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.360dialog.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{$json[\"chatId\"]}}\",\n  \"type\": \"document\",\n  \"document\": {\n    \"link\": \"{{$json[\"mediaUrl\"]}}\",\n    \"filename\": \"{{$json[\"filename\"]}}\"\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -100
+      ],
+      "id": "a884d699-c06e-41fc-b296-6d6caa3b3fee",
+      "name": "Send Media Message",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ic4qCTZz1PBVCiqv",
+          "name": "360dialog"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json[\"type\"]}}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cfdbaa14-6e43-4524-8843-09d183981ecc"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "258e79b4-0505-4295-937c-94a721151351",
+                    "leftValue": "={{$json[\"type\"]}}",
+                    "rightValue": "media",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "media"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "93caea4f-90db-4bb1-a318-f501b8bd7139",
+                    "leftValue": "={{$json[\"type\"]}}",
+                    "rightValue": "interactive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "interactive"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
       "type": "n8n-nodes-base.switch",
-      "typeVersion": 1,
-      "position": [450, 250]
+      "typeVersion": 3.2,
+      "position": [
+        280,
+        0
+      ],
+      "id": "f8860cae-7924-46ee-ad6d-378a58113b23",
+      "name": "Switch – Message Type"
     },
     {
       "parameters": {
-        "url": "https://api.360dialog.com/v1/messages",
-        "method": "POST",
-        "jsonParameters": true,
-        "options": {},
-        "bodyParametersJson": "={\"to\": {{$json[\"chatId\"]}},\"type\":\"text\",\"text\":{\"body\": {{$json[\"text\"]}}}}"
+        "httpMethod": "POST",
+        "path": "/wa/send",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
       },
-      "name": "Send Text",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
-      "position": [650, 150],
-      "credentials": { "httpBasicAuth": "360dialog WhatsApp" }
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -40
+      ],
+      "id": "1681b6c3-1cf6-4cab-8df1-0524166cff0e",
+      "name": "Webhook – Receive Send Request",
+      "webhookId": "c280e610-e274-47b1-adc6-b01535b8dedb"
     },
     {
       "parameters": {
-        "url": "https://api.360dialog.com/v1/messages",
-        "method": "POST",
-        "jsonParameters": true,
-        "bodyParametersJson": "={\"to\": {{$json[\"chatId\"]}},\"type\":\"document\",\"document\":{\"link\": {{$json[\"mediaUrl\"]}},\"filename\": {{$json[\"filename\"]}}}}"
-      },
-      "name": "Send Media",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
-      "position": [650, 300],
-      "credentials": { "httpBasicAuth": "360dialog WhatsApp" }
-    },
-    {
-      "parameters": {
-        "url": "https://api.360dialog.com/v1/messages",
-        "method": "POST",
-        "jsonParameters": true,
-        "bodyParametersJson": "={\"to\": {{$json[\"chatId\"]}},\"type\":\"interactive\",\"interactive\": {{$json[\"interactive\"]}}}"
-      },
-      "name": "Send Interactive",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
-      "position": [650, 450],
-      "credentials": { "httpBasicAuth": "360dialog WhatsApp" }
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
-            { "name": "status", "value": "={{ $json(\"sent\") ? 'sent' : 'error' }}" },
-            { "name": "waMsgId", "value": "={{ $json(\"messages\")[0].id }}" }
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "chatId"
+            },
+            {
+              "name": "type"
+            },
+            {
+              "name": "text"
+            },
+            {
+              "name": "url"
+            },
+            {
+              "name": "filename"
+            }
           ]
         }
       },
-      "name": "Set Response",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [850, 300]
-    },
-    {
-      "parameters": {
-        "responseMode": "lastNode",
-        "lastNodeOutput": "Set Response"
-      },
-      "name": "Respond to Webhook",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1050, 300]
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -140,
+        140
+      ],
+      "id": "72665554-3aa5-41d1-b05d-ee04c02b5720",
+      "name": "When Executed by Another Workflow"
     }
   ],
+  "pinData": {},
   "connections": {
-    "Webhook": { "main": [[{ "node": "Switch Type", "type": "main", "index": 0 }]] },
-    "Switch Type": {
+    "Send Text Message": {
       "main": [
-        [{ "node": "Send Text", "type": "main", "index": 0 }],
-        [{ "node": "Send Media", "type": "main", "index": 0 }],
-        [{ "node": "Send Interactive", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set – Reply Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Send Text": { "main": [[{ "node": "Set Response", "type": "main", "index": 0 }]] },
-    "Send Media": { "main": [[{ "node": "Set Response", "type": "main", "index": 0 }]] },
-    "Send Interactive": { "main": [[{ "node": "Set Response", "type": "main", "index": 0 }]] },
-    "Set Response": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
-  }
+    "Set – Erreur": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Reply Interactive": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Reply Media": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set – Reply Text": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Interactive Message": {
+      "main": [
+        [
+          {
+            "node": "Set – Reply Interactive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Media Message": {
+      "main": [
+        [
+          {
+            "node": "Set – Reply Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch – Message Type": {
+      "main": [
+        [
+          {
+            "node": "Send Text Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Media Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Interactive Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set – Erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook – Receive Send Request": {
+      "main": [
+        [
+          {
+            "node": "Switch – Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Switch – Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2a908828-26be-4968-bf30-6e01bab93bb6",
+  "meta": {
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "iy6pGUURrqUYkFFl",
+  "tags": []
 }

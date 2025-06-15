@@ -1,4 +1,13 @@
+version: "3.8"
+
+########################################################################
+#                Portatou – stack complète (self-host)                 #
+#   Postgres (pgvector) · Redis · MinIO · Apache Tika · n8n · Influx   #
+#   Grafana                                                             #
+########################################################################
+
 services:
+# ------------------------------ PostgreSQL ------------------------------
   postgres:
     image: ankane/pgvector:latest
     environment:
@@ -15,6 +24,7 @@ services:
       timeout: 5s
       retries: 5
 
+# -------------------------------- Redis --------------------------------
   redis:
     image: redis:7-alpine
     ports:
@@ -27,46 +37,43 @@ services:
       timeout: 5s
       retries: 5
 
+# ------------------------------- MinIO ---------------------------------
   minio:
     image: minio/minio:latest
+    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
-    command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+# ---------------------------- Apache Tika ------------------------------
+  tika:
+    image: logicalspark/docker-tikaserver:latest          # image existante
+    ports:
+      - "9998:9998"
+    environment:
+      TIKA_JAVA_OPTS: -Xmx1500m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+# ------------------------------- n8n -----------------------------------
   n8n:
     image: n8nio/n8n:latest
     restart: always
     ports:
       - "5678:5678"
-    environment:
-      DB_TYPE: postgres
-      DB_POSTGRESDB_HOST: postgres
-      DB_POSTGRESDB_PORT: 5432
-      DB_POSTGRESDB_DATABASE: portatou
-      DB_POSTGRESDB_USER: portatou
-      DB_POSTGRESDB_PASSWORD: portatou
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: admin
-      N8N_BASIC_AUTH_PASSWORD: admin123
-      N8N_ENCRYPTION_KEY: "MaCleSuperSecrete1234567890123456"
-      GENERIC_TIMEZONE: "Europe/Paris"
-      N8N_RUNNERS_ENABLED: "true"
-      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY_ID: minio
-      S3_SECRET_ACCESS_KEY: minio123
-      S3_BUCKET_NAME: portatou-docs
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,9 +81,40 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      tika:
+        condition: service_healthy
+    environment:
+      # ---- Base Postgres
+      DB_TYPE: postgres
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: portatou
+      DB_POSTGRESDB_USER: portatou
+      DB_POSTGRESDB_PASSWORD: portatou
+
+      # ---- Auth n8n
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: admin123
+      N8N_ENCRYPTION_KEY: "MaCleSuperSecrete1234567890123456"
+      GENERIC_TIMEZONE: "Europe/Paris"
+
+      # ---- Runners & sécurité
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+
+      # ---- MinIO (S3)
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY_ID: minio
+      S3_SECRET_ACCESS_KEY: minio123
+      S3_BUCKET_NAME: portatou-docs
+
+      # ---- URL interne du serveur Tika
+      TIKA_URL: http://tika:9998
     volumes:
       - n8n_data:/home/node/.n8n
 
+# ----------------------------- InfluxDB ---------------------------------
   influxdb:
     image: influxdb:2.7
     ports:
@@ -91,27 +129,30 @@ services:
     volumes:
       - influxdata:/var/lib/influxdb2
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8086/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:8086/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+# ------------------------------ Grafana ---------------------------------
   grafana:
     image: grafana/grafana:10.3.3
     ports:
       - "3000:3000"
+    depends_on:
+      influxdb:
+        condition: service_healthy
     environment:
       GF_SECURITY_ADMIN_PASSWORD: grafana
-    depends_on:
-      - influxdb
     volumes:
       - grafanadata:/var/lib/grafana
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:3000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
+# ------------------------------ Volumes ---------------------------------
 volumes:
   pgdata:
   redisdata:

@@ -1,0 +1,438 @@
+{
+  "name": "upload-offre-pdf",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/upload-offre",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "521c135d-e9cf-43b6-9a02-e8830f5f038d",
+      "name": "Start (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        320
+      ],
+      "webhookId": "b2f45797-47b3-4aaf-a5e3-6d2aa701e2f7"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "portatou-catalog",
+        "fileName": "={{ \"offers/\" + $binary.data.fileName }}",
+        "additionalFields": {}
+      },
+      "id": "c067ec48-7580-4c7e-91ae-22f9598df2ee",
+      "name": "Store File – MinIO",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        640,
+        320
+      ],
+      "credentials": {
+        "s3": {
+          "id": "ZJgfSCspb3S2V7zX",
+          "name": "MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.TIKA_URL}}/tika",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "text/plain; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        320
+      ],
+      "id": "abf8b1fa-b62a-4f89-bab2-7c25207e7590",
+      "name": "HTTP Tika Parse"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bee677c0-c5ee-47f9-9553-244ed0d211f4",
+              "leftValue": "={{ $json.data ? $json.data.length : 0 }}",
+              "rightValue": 100,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        320
+      ],
+      "id": "6c1a83c6-12a5-4f85-ac3c-d4873178edf6",
+      "name": "If – Need OCR?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://tika:9998/tika",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "text/plain"
+            },
+            {
+              "name": "X-Tika-PDFOcrStrategy",
+              "value": "ocr_only"
+            },
+            {
+              "name": "X-Tika-OCRLanguage",
+              "value": "fra+eng"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        220
+      ],
+      "id": "746dfbc7-953e-44bf-9818-cd5c62562284",
+      "name": "OCR – Tika"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1400,
+        400
+      ],
+      "id": "3dd61baf-1991-4866-805f-bdfdc1c61d82",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "let longest = '';\nfor (const item of $items()) {\n  const txt = item.json.data ?? '';\n  if (txt.length > longest.length) longest = txt;\n}\nreturn [{\n  json: { transcript: longest.trim() }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        400
+      ],
+      "id": "30af214c-d5fd-43e4-976a-215a3c32e403",
+      "name": "Select Transcript"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-2024-05-13",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-2024-05-13"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a sales assistant who extracts metadata from commercial PDFs.\n",
+              "role": "system"
+            },
+            {
+              "content": "==You will receive the full transcript of a commercial PDF.\nReturn **pure JSON** with exactly these keys:\n- title (string)\n- summary (string, max 70 words)\n- tags (array of 5 keywords)\n\nTranscript:\n{{$json.transcript}}\n"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1840,
+        400
+      ],
+      "id": "ee628040-835a-4d5e-9db2-086595d0d1b2",
+      "name": "Summarise & Tag",
+      "credentials": {
+        "openAiApi": {
+          "id": "RdJcVsE4FKBgoyaR",
+          "name": "OpenAi GPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=={\n  model: \"text-embedding-3-small\",\n  input: $json.summary + \" \" +\n         (Array.isArray($json.tags)\n              ? $json.tags.join(\", \")\n              : $json.tags)\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2260,
+        400
+      ],
+      "id": "b1743384-9765-4204-95a0-f018f0df77a0",
+      "name": "Embedding – HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ic4qCTZz1PBVCiqv",
+          "name": "360dialog"
+        },
+        "httpBearerAuth": {
+          "id": "C7I84DRyBsLjWwkW",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      title:    $node[\"Summarise & Tag\"].json.title,\n      summary:  $node[\"Summarise & Tag\"].json.summary,\n      tags:     $node[\"Summarise & Tag\"].json.tags,\n      embedding: $node[\"Embedding – HTTP Request\"].json.embedding_api.data[0].embedding,\n      file_path: $node[\"Store File – MinIO\"].json.fileName\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2480,
+        400
+      ],
+      "id": "9be41d07-6e17-4924-9231-f9fc10d052c2",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO catalog_chunks\n  (title, summary, tags, embedding, file_path, created_at)\nVALUES\n  ($1, $2, $3, $4::vector, $5, NOW())\nON CONFLICT (file_path) DO UPDATE SET\n  summary   = EXCLUDED.summary,\n  tags      = EXCLUDED.tags,\n  embedding = EXCLUDED.embedding\nRETURNING id;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2700,
+        400
+      ],
+      "id": "d561d899-44b3-47fb-9e75-c06e579edfb5",
+      "name": "Insert Catalog Row",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  ok: true,\n  id: $node[\"Insert Catalog Row\"].json.id ?? $node[\"Insert Catalog Row\"].json[0].id,\n  file_path: $node[\"Store File – MinIO\"].json.fileName\n}\n",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2880,
+        400
+      ],
+      "id": "d1d019f1-2552-40d3-9d77-28feceef1b68",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Store File – MinIO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store File – MinIO": {
+      "main": [
+        [
+          {
+            "node": "HTTP Tika Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Tika Parse": {
+      "main": [
+        [
+          {
+            "node": "If – Need OCR?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If – Need OCR?": {
+      "main": [
+        [
+          {
+            "node": "OCR – Tika",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "OCR – Tika": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Select Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Transcript": {
+      "main": [
+        [
+          {
+            "node": "Summarise & Tag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarise & Tag": {
+      "main": [
+        [
+          {
+            "node": "Embedding – HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding – HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Insert Catalog Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Catalog Row": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5db0dd14-293c-412b-9d68-210f705a9093",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "PsQhxwCds5omZhAF",
+  "tags": []
+}

@@ -1,0 +1,543 @@
+{
+  "name": "detect-prospects-google",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 4
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b6f30c17-68cf-4a2b-8af0-4c24dbf070aa",
+      "name": "Cron – Daily 04 h"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  full_name,\n  phone,\n  gps_lat AS lat,\n  gps_lon AS lng\nFROM users\nWHERE active = true\n  AND gps_lat IS NOT NULL\n  AND gps_lon IS NOT NULL;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        0
+      ],
+      "id": "65e000af-d755-4016-8e8b-f25d6c290cce",
+      "name": "Get Active Reps",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "location",
+              "value": "={{ $json.lat }},{{ $json.lng }}"
+            },
+            {
+              "name": "radius",
+              "value": "12000"
+            },
+            {
+              "name": "type",
+              "value": "hair_salon"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_PLACES_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "01f89921-1b98-402c-98dd-22e9199369f8",
+      "name": "HTTP – Google Places Search",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ic4qCTZz1PBVCiqv",
+          "name": "360dialog"
+        },
+        "httpQueryAuth": {
+          "id": "vnobZFa4DqqLgOdx",
+          "name": "Google Places"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        620,
+        0
+      ],
+      "id": "b2ec585f-9931-4615-bc9b-6773596367ad",
+      "name": "Split Results"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id\nFROM   prospects\nWHERE  place_id = $1;\n",
+        "options": {
+          "queryReplacement": "={{ $json.place_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        0
+      ],
+      "id": "aa94b809-e007-4b80-b2a8-4b2dc06b2b9a",
+      "name": "Check Prospect Exists",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "43a9c552-4354-4f3e-aa3e-47b394c84093",
+              "leftValue": "={{ $items(\"Check Prospect Exists\").length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        980,
+        0
+      ],
+      "id": "b043af84-144b-4b0b-bf17-86ae9538a406",
+      "name": "IF – Prospect Exists"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "prospects",
+          "mode": "list",
+          "cachedResultName": "prospects"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "place_id": "={{ $json.place_id }}",
+            "name": "={{ $json.name }}",
+            "lat": "={{$json.lat}}",
+            "lng": "={{$json.lng}}",
+            "address": "={{$json.address}}",
+            "created_at": "={{ $now }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "place_id",
+              "displayName": "place_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lat",
+              "displayName": "lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "lng",
+              "displayName": "lng",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "address",
+              "displayName": "address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1260,
+        140
+      ],
+      "id": "78777f69-beb3-431c-be85-23959ed8f272",
+      "name": "Insert Prospect",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    id,\n    full_name,            -- nom complet du commercial\n    gps_lat  AS lat,      -- latitude décimale\n    gps_lon  AS lng       -- longitude décimale\nFROM users\nWHERE gps_lat IS NOT NULL     -- on garde ceux qui ont une position\n  AND gps_lon IS NOT NULL;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1200,
+        -100
+      ],
+      "id": "8079957e-320d-4916-b6d9-a8314e4648cc",
+      "name": "Get Active Reps1",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Entrées utilisées\n *  - $items('Insert Prospect')   : 1 item par prospect inséré\n *  - $items('Get Active Reps1')  : 1 item par commercial actif\n */\n\n// ---------- Récupération des jeux de données ----------\nconst prospect = $item(0).json;                              // l’item courant = 1 prospect\nconst reps      = $items('Get Active Reps1').map(i => i.json);\n\n// ---------- Fonction Haversine (km) ----------\nfunction haversine(lat1, lon1, lat2, lon2) {\n  const R = 6371;\n  const toRad = d => d * Math.PI / 180;\n  const dLat = toRad(lat2 - lat1);\n  const dLon = toRad(lon2 - lon1);\n  const a = Math.sin(dLat / 2) ** 2 +\n            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *\n            Math.sin(dLon / 2) ** 2;\n  return 2 * R * Math.asin(Math.sqrt(a));\n}\n\n// ---------- Recherche du rep le plus proche ----------\nlet best = null;\nfor (const rep of reps) {\n  // Skip si coordonnées manquantes\n  if (rep.lat == null || rep.lng == null) continue;\n\n  const dist = haversine(prospect.lat, prospect.lng, rep.lat, rep.lng);\n\n  if (!best || dist < best.dist) {\n    best = { ...rep, dist };          // on mémorise le plus court\n  }\n}\n\n// ---------- Gestion du cas “aucun rep trouvé” ----------\nif (!best) {\n  throw new Error('Aucun commercial actif avec coordonnés GPS');\n}\n\n// ---------- Sortie ----------\nreturn [\n  {\n    json: {\n      prospect_id   : prospect.place_id,          // on renvoie place_id si pas de PK interne\n      prospect_name : prospect.name,\n      prospect_addr : prospect.address,\n      prospect_lat  : prospect.lat,\n      prospect_lng  : prospect.lng,\n\n      rep_id        : best.id,\n      rep_name      : best.full_name,             // full_name vient de la requête SQL\n      rep_phone     : best.phone,\n      distance_km   : Number(best.dist.toFixed(2))\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        -100
+      ],
+      "id": "c32133b6-0f61-44a4-92a3-42205bb05303",
+      "name": "Pick Nearest Rep"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE prospects\nSET    assigned_to = $1,\n       status      = 'new'\nWHERE  id = $2\nRETURNING id, assigned_to;\n",
+        "options": {
+          "queryReplacement": "={{ $json.assigned_to }},{{ $json.prospect_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1520,
+        -100
+      ],
+      "id": "2427ee4d-6b51-49d9-a27f-d6ae527ac375",
+      "name": "Assign Lead",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "iy6pGUURrqUYkFFl",
+          "mode": "list",
+          "cachedResultName": "send-wa-message"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chatId": "={{ $json.rep_phone }}",
+            "type": "text",
+            "text": "=={{`👋 Bonjour ${$json.rep_name} ! Nouveau prospect détecté : ${$json.prospect_name}, ${$json.prospect_address} (${($json.distance_km || 0).toFixed(1)} km).`}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chatId",
+              "displayName": "chatId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "filename",
+              "displayName": "filename",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1740,
+        -100
+      ],
+      "id": "328ad55e-6366-49ce-b209-6693c3e2e63b",
+      "name": "Notify Rep"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron – Daily 04 h": {
+      "main": [
+        [
+          {
+            "node": "Get Active Reps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Reps": {
+      "main": [
+        [
+          {
+            "node": "HTTP – Google Places Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP – Google Places Search": {
+      "main": [
+        [
+          {
+            "node": "Split Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Results": {
+      "main": [
+        [
+          {
+            "node": "Check Prospect Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Prospect Exists": {
+      "main": [
+        [
+          {
+            "node": "IF – Prospect Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF – Prospect Exists": {
+      "main": [
+        [
+          {
+            "node": "Get Active Reps1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Prospect": {
+      "main": [
+        []
+      ]
+    },
+    "Get Active Reps1": {
+      "main": [
+        [
+          {
+            "node": "Pick Nearest Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Nearest Rep": {
+      "main": [
+        [
+          {
+            "node": "Assign Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Lead": {
+      "main": [
+        [
+          {
+            "node": "Notify Rep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "17b322c7-a449-4f34-a5e6-37ef68283d22",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "IiKYNNVuYp0RPlED",
+  "tags": []
+}
