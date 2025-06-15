@@ -146,7 +146,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1400,
+        1440,
         400
       ],
       "id": "3dd61baf-1991-4866-805f-bdfdc1c61d82",
@@ -341,7 +341,7 @@
           {
             "node": "Merge",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -352,7 +352,7 @@
           {
             "node": "Merge",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -428,7 +428,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "5db0dd14-293c-412b-9d68-210f705a9093",
+  "versionId": "8a2e96f2-ea46-4074-8b0a-7748b8e50605",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
