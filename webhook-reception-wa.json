@@ -1,0 +1,455 @@
+{
+  "name": "webhook-reception-wa",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wa/inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "30ffbcbf-93ac-4511-8ced-5320117dcca3",
+      "name": "Webhook – 360 WA inbound",
+      "webhookId": "e8f7b090-ff25-4f70-b5c3-4ae0bd3c03ad"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Entrée : payload brut de 360dialog\n * ─ contacts[0].wa_id\n * ─ messages[0].{type, id, ...}\n *\n * Sortie : objet plat\n *  {\n *    wa_id,          // numéro WhatsApp\n *    client_id,      // (lookup optionnel)\n *    msg_id,\n *    msg_type,       // text | image | audio | document | interactive | ...\n *    body,           // texte du message ou légende\n *    media_id,       // pour image/doc/audio (si dispo)\n *    timestamp\n *  }\n */\n\n// ----- 1. Extraction du premier message --------\nconst body      = $json;\nconst msg       = body.messages?.[0] ?? {};\nconst contact   = body.contacts?.[0] ?? {};\n\nconst waId      = msg.from || contact.wa_id || null;\nconst msgType   = msg.type || 'unknown';\nconst ts        = Number(msg.timestamp || Date.now() / 1000) * 1000;\n\n// Texte ou légende\nlet content = '';\nif (msgType === 'text')          content = msg.text?.body ?? '';\nelse if (msgType === 'interactive') content = msg.interactive?.button_reply?.title\n                                      || msg.interactive?.list_reply?.title\n                                      || '';\nelse                              content = msg.caption ?? '';\n\n// Media ID si présent\nconst mediaId = msg[msgType]?.id ?? null;\n\n// ----- 2. (Option) lookup client_id via table clients -------------\n/*\n   Si tu as déjà une table \"clients\" (wa_id → id) :\n   const result = await pg.query('SELECT id FROM clients WHERE wa_id = $1', [waId]);\n   const clientId = result.rows[0]?.id ?? null;\n   Ici on se contente de transmettre waId, le mapping peut se\n   faire plus tard ou dans un autre nœud.\n*/\nconst clientId = null;\n\n// ----- 3. Retour -----\nreturn [{\n  json: {\n    wa_id      : waId,\n    client_id  : clientId,\n    msg_id     : msg.id ?? null,\n    msg_type   : msgType,\n    body       : content,\n    media_id   : mediaId,\n    timestamp  : new Date(ts).toISOString()\n  },\n  binary: $binary   // on propage le binaire s’il existe (pour les media)\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "45e9a82d-091e-468e-ba64-44a8aa180567",
+      "name": "Parse WA payload"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.msg_type }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "befd5ba6-c6f7-4024-ad4b-5d9bdd259880"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b6d8d288-b7d4-4eb3-bb69-0fa48a18c0d2",
+                    "leftValue": "={{ $json.msg_type }}",
+                    "rightValue": "image,audio,video,document,sticker",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "media"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e74220a0-051c-4d09-a176-814c24ead561",
+                    "leftValue": "={{ $json.msg_type }}",
+                    "rightValue": "interactive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "interactive"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "a2f02940-3085-4a79-a274-81fb7642b404",
+      "name": "Switch – Message Type"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "G9Gq8gTLY9WYxOoo",
+          "mode": "list",
+          "cachedResultName": "Analyse-document-client"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "bbffde77-6a09-4c61-ac33-0ed7af060536",
+      "name": "Run analyse-document-client"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "iy6pGUURrqUYkFFl",
+          "mode": "list",
+          "cachedResultName": "send-wa-message"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chatId": "{{ $json.wa_id }}",
+            "type": "text",
+            "text": "Bonjour ! Nous avons reçu votre message : “{{ $json.body }}”"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chatId",
+              "displayName": "chatId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "filename",
+              "displayName": "filename",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        640,
+        -140
+      ],
+      "id": "8928bb0e-1e26-49f6-8575-e0266f47b426",
+      "name": "Run send-wa-message"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "135ca234-63d2-4741-abd9-1531a5384e53",
+              "name": "client_id",
+              "value": "{{$json.client_id}} ",
+              "type": "string"
+            },
+            {
+              "id": "54c5c56b-4628-4431-ae96-e60fb404e477",
+              "name": "rep_id",
+              "value": "{{$json.wa_id}} ",
+              "type": "string"
+            },
+            {
+              "id": "7f94f1f5-8923-4f81-b4d6-40ae17d40ff2",
+              "name": "message_type",
+              "value": "={{$json.msg_type}}",
+              "type": "string"
+            },
+            {
+              "id": "c2d34bad-8082-43fe-9dfc-73728c01944a",
+              "name": "text",
+              "value": "{{ $node[\"Run analyse-document-client\"] ? $node[\"Run analyse-document-client\"].json.transcript : $json.body }}",
+              "type": "string"
+            },
+            {
+              "id": "69699854-5ab0-4007-bb80-ed1b39cc6a16",
+              "name": "file_path",
+              "value": "{{ $node[\"Run analyse-document-client\"]?.json.file_path}}",
+              "type": "string"
+            },
+            {
+              "id": "6a83f787-076b-4de1-9072-6f0bf923fae1",
+              "name": "created_at",
+              "value": "={{$now.toISOString()}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        -120
+      ],
+      "id": "77836151-328e-47d1-bb2b-5e9c93988a5a",
+      "name": "Build WA Inbound Row"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chat_history\n  (client_id, rep_id, message_type, text, file_path, created_at)\nVALUES\n  ($1, $2, $3, $4, $5, $6)\nRETURNING id;\n",
+        "options": {
+          "queryReplacement": "={{ $node[\"Build WA Inbound Row\"].json.client_id }}, {{ $node[\"Build WA Inbound Row\"].json.rep_id }}, {{ $node[\"Build WA Inbound Row\"].json.message_type }}, {{ $node[\"Build WA Inbound Row\"].json.text }}, {{ $node[\"Build WA Inbound Row\"].json.file_path }}, {{ $node[\"Build WA Inbound Row\"].json.created_at }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1100,
+        -60
+      ],
+      "id": "8b155d6f-d5dc-4614-9a79-21f8ffa6ab4f",
+      "name": "Postgres – Insert WA Inbound",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1520,
+        -40
+      ],
+      "id": "01c05ccf-eeb3-4b6a-baf7-5174a1d4ef0f",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "86b27745-4798-4830-b389-eb2acbbadce2",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1300,
+        -40
+      ],
+      "id": "2d087ed5-7a38-496b-a530-0cce84167bae",
+      "name": "Build Ack Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook – 360 WA inbound": {
+      "main": [
+        [
+          {
+            "node": "Parse WA payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse WA payload": {
+      "main": [
+        [
+          {
+            "node": "Switch – Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch – Message Type": {
+      "main": [
+        [
+          {
+            "node": "Run send-wa-message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run analyse-document-client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run send-wa-message": {
+      "main": [
+        [
+          {
+            "node": "Build WA Inbound Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run analyse-document-client": {
+      "main": [
+        [
+          {
+            "node": "Build WA Inbound Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build WA Inbound Row": {
+      "main": [
+        [
+          {
+            "node": "Postgres – Insert WA Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres – Insert WA Inbound": {
+      "main": [
+        [
+          {
+            "node": "Build Ack Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ack Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9febd43a-bf9e-48f5-8a33-6d149c679d2d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "DtSoREd2XVytkq0w",
+  "tags": []
+}

@@ -1,0 +1,417 @@
+{
+  "name": "upload-cr-pdf-minio",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "portatou-docs",
+        "fileName": "=`reports/${$json.client_id}/${$now.format('YYYYMMDDHHmmss')}-${$binary.file.fileName}`",
+        "binaryPropertyName": "=file",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "815a1908-0c5e-4815-849d-149aabbca373",
+      "name": "Store File – MinIO (S3)",
+      "credentials": {
+        "s3": {
+          "id": "ZJgfSCspb3S2V7zX",
+          "name": "MinIO"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://tika:9998/tika",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "text/plain"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "raw_text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "35480811-be1b-4fe8-863d-137001fabde7",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client/upload-cr",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a7c65601-5c80-41c8-974b-4dc7f2c991bf",
+      "name": "Webhook – Upload CR",
+      "webhookId": "7288a72f-09d4-4cb9-ae4a-35c39a25f20d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c37ef677-4f31-462d-b6db-543340255395",
+              "leftValue": "={{ $json.raw_text ? $json.raw_text.length : 0 }}",
+              "rightValue": 100,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        40
+      ],
+      "id": "a2a0daff-c290-465a-8fb9-faf5ec185ace",
+      "name": "If – Need Transcription ?"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $binary.file.mimeType }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "a1cd701b-964a-49c6-a6b4-353ece732a86"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bec40486-6e25-4f37-b1c9-c56210154385",
+                    "leftValue": "={{ $binary.file.mimeType }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notContains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        -140
+      ],
+      "id": "d7e9cb0b-9ce2-4b18-9680-d4be65fd19d2",
+      "name": "Switch – Detect file type",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "binaryPropertyName": "file",
+        "options": {
+          "language": "fr"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1020,
+        -160
+      ],
+      "id": "704a77ab-7107-4049-8bf2-704f24ca69f6",
+      "name": "Transcribe – Whisper",
+      "credentials": {
+        "openAiApi": {
+          "id": "RdJcVsE4FKBgoyaR",
+          "name": "OpenAi GPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://tika:9998/tika",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "text/plain"
+            },
+            {
+              "name": "X-Tika-PDFOcrStrategy",
+              "value": "ocr_only"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        40
+      ],
+      "id": "e032b684-3cd0-4b21-bfb4-239d9900ca88",
+      "name": "OCR – Tika"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const txt  = ($json.text ?? '').trim();\nconst mime = $binary?.file?.mimeType ?? null;\n\nreturn [\n  {\n    json: {\n      client_id:    $json.client_id,\n      rep_id:       $json.author_name ?? null,\n      message_type: mime,\n      file_path:    $json.key,          // clé S3 renvoyée par le node MinIO\n      text:         txt,\n      created_at:   new Date().toISOString()\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        260
+      ],
+      "id": "ad172f8a-dd2d-4a62-a411-5829dd01fcbb",
+      "name": "Build CR Row"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chat_history\n  (client_id, rep_id, message_type, \"text\", file_path, created_at)\nVALUES\n  ($1,        $2,     $3,           $4,      $5,       NOW())\nRETURNING id;\n",
+        "options": {
+          "queryReplacement": "={{ $json.client_id }},{{ $json.rep_id }},{{ $json.message_type }},{{ $json.text }},{{ $json.file_path }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1420,
+        260
+      ],
+      "id": "e9b9ee0d-e0ac-4e77-87e2-859bab3280cd",
+      "name": "Insert CR Row",
+      "credentials": {
+        "postgres": {
+          "id": "u1lL6qpbNWgDrAqx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ ok: true, id: $node[\"Insert CR Row\"].json[0].id }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1640,
+        280
+      ],
+      "id": "2bbcd8dd-7a12-4bdf-86cf-eaa6764665ab",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Store File – MinIO (S3)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If – Need Transcription ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook – Upload CR": {
+      "main": [
+        [
+          {
+            "node": "Store File – MinIO (S3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If – Need Transcription ?": {
+      "main": [
+        [
+          {
+            "node": "Switch – Detect file type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build CR Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch – Detect file type": {
+      "main": [
+        [
+          {
+            "node": "Transcribe – Whisper",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OCR – Tika",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OCR – Tika": {
+      "main": [
+        [
+          {
+            "node": "Build CR Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe – Whisper": {
+      "main": [
+        [
+          {
+            "node": "Build CR Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CR Row": {
+      "main": [
+        [
+          {
+            "node": "Insert CR Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert CR Row": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "09323221-1a61-4f77-89f2-e66d0d8b54de",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
+  },
+  "id": "dTESgpZGLIrwx7FQ",
+  "tags": []
+}
