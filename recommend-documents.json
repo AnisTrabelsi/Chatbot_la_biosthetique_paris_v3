@@ -98,7 +98,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw  = $node['Embed Prompt – HTTP Request'].json.embedding_api.data[0].embedding;\nconst norm = Math.sqrt(raw.reduce((s, v) => s + v * v, 0));\n\nreturn [{\n  json: {\n    embedding : raw.map(v => v / norm),\n    top_n     : Number($json.top_n ?? 5),\n    client_id : $json.client_id ?? null\n  }\n}];\n"
+        "jsCode": "const raw  = $node['Embed Prompt – HTTP Request'].json.data[0].embedding;\nconst norm = Math.sqrt(raw.reduce((s, v) => s + v * v, 0)) || 1;\n\nreturn [{\n  json: {\n    embedding : raw.map(v => v / norm),\n    top_n     : Number($json.top_n ?? 5),\n    client_id : $json.client_id ?? null\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -196,7 +196,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "bb6a479f-a6e3-46c6-b6e1-f632fce7d1fe",
+  "versionId": "50eaf0fb-bc8b-4249-ac19-6790833be0d0",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87"
