@@ -7,7 +7,7 @@ version: "3.8"
 ########################################################################
 
 services:
-# ------------------------------ PostgreSQL ------------------------------
+  # ------------------------------ PostgreSQL ------------------------------
   postgres:
     image: ankane/pgvector:latest
     environment:
@@ -24,7 +24,7 @@ services:
       timeout: 5s
       retries: 5
 
-# -------------------------------- Redis --------------------------------
+  # -------------------------------- Redis --------------------------------
   redis:
     image: redis:7-alpine
     ports:
@@ -37,7 +37,7 @@ services:
       timeout: 5s
       retries: 5
 
-# ------------------------------- MinIO ---------------------------------
+  # ------------------------------- MinIO ---------------------------------
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -55,9 +55,9 @@ services:
       timeout: 10s
       retries: 3
 
-# ---------------------------- Apache Tika ------------------------------
+  # ---------------------------- Apache Tika ------------------------------
   tika:
-    image: logicalspark/docker-tikaserver:latest          # image existante
+    image: logicalspark/docker-tikaserver:latest
     ports:
       - "9998:9998"
     environment:
@@ -68,7 +68,7 @@ services:
       timeout: 10s
       retries: 10
 
-# ------------------------------- n8n -----------------------------------
+  # ------------------------------- n8n -----------------------------------
   n8n:
     image: n8nio/n8n:latest
     restart: always
@@ -113,8 +113,9 @@ services:
       TIKA_URL: http://tika:9998
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./workflows:/home/node/workflows:ro
 
-# ----------------------------- InfluxDB ---------------------------------
+  # ----------------------------- InfluxDB ---------------------------------
   influxdb:
     image: influxdb:2.7
     ports:
@@ -134,7 +135,7 @@ services:
       timeout: 10s
       retries: 3
 
-# ------------------------------ Grafana ---------------------------------
+  # ------------------------------ Grafana ---------------------------------
   grafana:
     image: grafana/grafana:10.3.3
     ports:
@@ -152,7 +153,7 @@ services:
       timeout: 10s
       retries: 3
 
-# ------------------------------ Volumes ---------------------------------
+# --------------------------------- Volumes ---------------------------------
 volumes:
   pgdata:
   redisdata:
